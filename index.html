@@ -173,6 +173,8 @@
 				let length_new = (text.match(/-?(?:(?:\d+).?(\d+)?|V)/));
 				if (length_new[0] == 'V') {
 					length_new = props.S;
+				}else{
+					length_new = length_new[0]
 				}
 				let length_orig = (end.clone().sub(start)).length()
 				let factorIncrease = length_new / length_orig;
