@@ -91,6 +91,7 @@
 		import * as THREE from './js/three.module.js';
 		import { SVGRenderer } from './js/SVGRenderer.js';
 		import { OrbitControls } from './js/OrbitControls.js';
+		import { GUI } from './js/dat.gui.module.js';
 
 		var camera, scene, renderer, controls, line, surface;
 		var penUp = false;
@@ -98,6 +99,7 @@
 		var start = new THREE.Vector3(0, 0, 0), end = new THREE.Vector3(length, 0, 0);
 		var horizontalAngle = 0, verticalAngle = 0;
 		const OLENGTH = 2;
+		var gui;
 
 		var startCircle, endCircle;
 
@@ -173,7 +175,7 @@
 				let length_new = (text.match(/-?(?:(?:\d+).?(\d+)?|V)/));
 				if (length_new[0] == 'V') {
 					length_new = props.S;
-				}else{
+				} else {
 					length_new = length_new[0]
 				}
 				let length_orig = (end.clone().sub(start)).length()
@@ -228,6 +230,7 @@
 			else if (functionName == 'repeat') {
 				let splitTextAndFunctions = text.split(/repeat \d+/);
 				let splits = splitTextAndFunctions[1].split(",");
+				delete splits[0]; // empty match
 				let runcount = parseInt(/(\d+)/.exec(text)[0]);
 				for (let i = 0; i < runcount; i++) {
 					splits.forEach(element => {
@@ -287,28 +290,9 @@
 			updateStartAndEnd();
 		}
 
-		// let args = /(\w) (-?\d+.?(?:\d+)?)/.exec(text);
-		// 		for (let i = 0; i < args.length / 2; i++) {
-		// 			props.var[`${args[2 * i]}`] = args[2 * i + 1];
-		// 		}
-		// 		propsTemp = props;
-		// 		props = {};
-		// 		console.log(props);
-		// 		custom
-		// 		parse(customFunctions[functionName.toString()], props);
-
 		window.addEventListener("keydown", (evt) => {
 			evt = evt || window.event;
-			if (evt.keyCode == '81') {
-				console.log(line);
-				//line.rotateZ(THREE.MathUtils.degToRad(45));
-			}
-			if (evt.keyCode == '69') {
-				console.log(line);
-				//line.rotateZ(THREE.MathUtils.degToRad(-45));
-			}
-			if (evt.keyCode == '32') {
-			} if (evt.keyCode == '13') {
+			if (evt.keyCode == '13') {
 				let text = document.getElementById('textEntryMain').value
 				parse(text);
 				document.getElementById('textEntryMain').value = null;
@@ -317,6 +301,7 @@
 		})
 
 		init();
+		initGui();
 		animate();
 
 		function getElementHW(element) {
@@ -334,7 +319,7 @@
 
 			// Create Scene and set Background
 			scene = new THREE.Scene();
-			scene.background = new THREE.Color(1.0,1.0,1.0);
+			scene.background = new THREE.Color(1.0, 1.0, 1.0);
 
 			// set rendering. Possibly render in WebGL directly instead of SVG?
 			//renderer = new SVGRenderer(); //{ antialias: true }
@@ -357,7 +342,6 @@
 			// orbit controls
 			controls = new OrbitControls(camera, renderer.domElement)
 			controls.update();
-			//controls.addEventListener('change', animate);
 
 			// construct grid for perspective
 
@@ -365,6 +349,8 @@
 			var divisions = 10;
 
 			var gridHelper = new THREE.GridHelper(size, divisions);
+			gridHelper.colorGrid = new THREE.Color(0x000000);
+			console.log(gridHelper);
 			scene.add(gridHelper);
 
 			// lighting 
@@ -421,7 +407,44 @@
 			requestAnimationFrame(animate);
 
 		}
+		function initGui() {
 
+			gui = new GUI();
+
+			var param = {
+				'Renderer': 0,
+			};
+
+
+			gui.add(param, 'Renderer', { 'WebGLRenderer': 0, 'SVGRenderer': 1 }).onChange(function (val) {
+				let HW = getElementHW(surface);
+
+				switch (val) {
+
+					case '0':
+						renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" }); //
+						surface.innerHTML = null;
+						surface.appendChild(renderer.domElement)
+						scene.background = new THREE.Color(1.0, 1.0, 1.0);
+						renderer.setSize(HW[0], HW[1]);
+						controls = new OrbitControls(camera, renderer.domElement)
+						controls.update();
+						break;
+
+					case '1':
+						renderer = new SVGRenderer();
+						surface.innerHTML = null;
+						surface.appendChild(renderer.domElement)
+						renderer.setSize(HW[0], HW[1]);
+						scene.background = new THREE.Color(0.0, 0.0, 0.0);
+						controls = new OrbitControls(camera, renderer.domElement)
+						controls.update();
+						break;
+
+				}
+
+			});
+		}
 	</script>
 </body>
 
