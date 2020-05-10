@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js svg - lines</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+	<style>
+		a {
+			color: #08f;
+		}
+
+		svg {
+			display: relative;
+		}
+
+		@media (orientation: landscape) {
+
+			.grid-container {
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+				grid-template-rows: 100vh;
+				height: 100vh;
+				max-height: 100vh;
+				gap: 1px 1px;
+				grid-template-areas: "textEntry textEntry canvasElement canvasElement canvasElement";
+			}
+
+			#textEntry {
+				grid-area: textEntry;
+				display: grid;
+				align-self: center;
+				justify-self: center;
+				width: 50%;
+				height: 12.5%;
+			}
+
+			#canvasElement {
+				grid-area: canvasElement;
+			}
+		}
+
+		@media (orientation: portrait) {
+
+			.grid-container {
+				display: grid;
+				grid-template-columns: 1fr;
+				grid-template-rows: 1fr 1fr 1fr 1fr 1fr;
+				height: 100vh;
+				max-height: 100vh;
+				gap: 1px 1px;
+				grid-template-areas: "canvasElement""canvasElement""canvasElement""textEntry""textEntry";
+			}
+
+			#textEntry {
+				grid-area: textEntry;
+				display: grid;
+				align-self: center;
+				justify-self: center;
+				width: 50%;
+				height: 25%;
+			}
+
+			#canvasElement {
+				grid-area: canvasElement;
+			}
+		}
+
+		#textEntry {
+			grid-area: textEntry;
+		}
+
+		#canvasElement {
+			grid-area: canvasElement;
+		}
+	</style>
+</head>
+
+<body>
+
+
+	<div class="grid-container">
+		<div id="textEntry">
+			<input type="text" id="textEntryMain">
+		</div>
+		<div id="canvasElement"></div>
+	</div>
+	<script type="module">
+
+		import * as THREE from './js/three.module.js';
+		import { SVGRenderer } from './js/SVGRenderer.js';
+		import { OrbitControls } from './js/OrbitControls.js';
+
+		var camera, scene, renderer, controls, line, surface;
+		var penUp = false;
+		var length = 2;
+		var start = new THREE.Vector3(0, 0, 0), end = new THREE.Vector3(length, 0, 0);
+		var horizontalAngle = 0, verticalAngle = 0;
+		const OLENGTH = 2;
+
+		var startCircle, endCircle;
+
+		var customFunctions = {}
+
+		function lat_long(verticalAngle, horizontalAngle, length) {
+
+			let vec = new THREE.Vector3(
+				length * Math.cos(horizontalAngle) * Math.cos(verticalAngle),
+				length * Math.sin(verticalAngle),
+				length * Math.sin(horizontalAngle) * Math.cos(verticalAngle));
+			return vec;
+		};
+
+		function changeVerticalAngle(angle) {
+			verticalAngle += (angle * Math.PI / 180);
+			let newPt = lat_long(verticalAngle, horizontalAngle, length)
+			end = start.clone().add(newPt);
+		}
+
+		function changeHorizontalAngle(angle) {
+			horizontalAngle += (angle * Math.PI / 180);
+			let newPt = lat_long(verticalAngle, horizontalAngle, length)
+			end = start.clone().add(newPt);
+		}
+
+		function updateStartAndEnd() {
+			startCircle.position.x = start['x'];
+			startCircle.position.y = start['y'];
+			startCircle.position.z = start['z'];
+			endCircle.position.x = end['x'];
+			endCircle.position.y = end['y'];
+			endCircle.position.z = end['z'];
+		}
+
+		function newLine() {
+			start = end.clone();
+			end = end.add(lat_long(verticalAngle, horizontalAngle, length));
+			let material = getMaterial();
+			let pointsArr = new THREE.BufferGeometry().setFromPoints([start, end]);
+			line = new THREE.LineSegments(pointsArr, material);
+			scene.add(line);
+
+			startCircle.position.x = start['x'];
+			startCircle.position.y = start['y'];
+			startCircle.position.z = start['z'];
+			endCircle.position.x = end['x'];
+			endCircle.position.y = end['y'];
+			endCircle.position.z = end['z'];
+
+		}
+
+		function commit() {
+			let pointsArr = new THREE.BufferGeometry().setFromPoints([start, end]);
+			line.geometry = pointsArr;
+			line.matrixAutoUpdate = false;
+			line.updateMatrix();
+		}
+
+		function getMaterial() {
+			let material = new THREE.LineBasicMaterial({
+				color: 0xff0000,
+				linewidth: 20,
+				visible: !penUp
+			});
+			return material;
+		}
+
+		function parse(text, props = []) {
+			let functionName = text.match(/\w+/);
+			functionName = functionName.toString().toLowerCase();
+			if (functionName == "forward") {
+				let length_new = (text.match(/-?(?:(?:\d+).?(\d+)?|V)/));
+				if (length_new[0] == 'V') {
+					length_new = props.S;
+				}
+				let length_orig = (end.clone().sub(start)).length()
+				let factorIncrease = length_new / length_orig;
+
+				line.geometry.scale(factorIncrease, 1, 1);
+				length = length_new;
+
+				commit();
+				newLine();
+			}
+			else if (functionName == "execute") {
+				commit();
+				newLine();
+			}
+			else if (functionName == "rotate") {
+				let args = /(?: ?)(?:\w+)(?: )(-?)(\w)(?: )((?:-?\d+.?(?:\d+)?)|V)/.exec(text);
+				let side = args[1];
+				let direction = args[2]
+				let angle = args[3];
+				if (angle == 'V') {
+					angle = props.S;
+				}
+				if (args[0] == '-') {
+					angle *= -1;
+				}
+				if (direction.toLowerCase() == 'x') {
+					if (side == '-') {
+						changeHorizontalAngle(parseFloat(angle) * -1);
+					} else {
+						changeHorizontalAngle(parseFloat(angle));
+					}
+				}
+				else if (direction.toLocaleLowerCase() == 'y') {
+					if (side == '-') {
+						changeVerticalAngle(parseFloat(angle) * -1);
+					} else {
+						changeVerticalAngle(parseFloat(angle));
+					}
+				} else {
+					alert("Direction input was not recognized");
+				}
+				commit();
+			}
+			else if (functionName == 'reset') {
+				horizontalAngle = 0;
+				verticalAngle = 0;
+				length = OLENGTH;
+				start = new THREE.Vector3(0, 0, 0);
+				end = new THREE.Vector3(length, 0, 0);
+			}
+			else if (functionName == 'repeat') {
+				let splitTextAndFunctions = text.split(/repeat \d+/);
+				let splits = splitTextAndFunctions[1].split(",");
+				let runcount = parseInt(/(\d+)/.exec(text)[0]);
+				for (let i = 0; i < runcount; i++) {
+					splits.forEach(element => {
+						parse(element);
+					});
+				}
+
+			}
+			else if (functionName == 'up') {
+				penUp = true;
+			}
+			else if (functionName == 'down') {
+				penUp = false;
+			}
+			else if (functionName == 'recurse') {
+				let start_save = start;
+				let end_save = end;
+				let propsSave = {};
+				propsSave.S = props.S;
+				propsSave.E = props.E;
+				if (props.startedByRecurse) {
+					text = props.recurse;
+				}
+				let args = /(?:\w*) ((?:-?\d+\.?(?:\d*)|V)) ((?:-?\d+\.?(?:\d*)|V))(?: ?),(?: ?)(.+)/.exec(text); // capture recurse, start, difference, sequence				
+
+				let varStart = args[1] == 'V' ? props.S : parseFloat(args[1]);
+				props.S = varStart;
+				let varEnd = args[2] == 'V' ? props.E : parseFloat(args[2]);
+				props.E = varEnd;
+				props.startedByRecurse = true;
+
+				let functionsList = args[3].split(',')
+				props.recurse = args[3];
+
+
+				functionsList.forEach((element) => {
+					if (element.toString().includes("recurse")) {
+						if (varStart - varEnd > 0) {
+							props.S -= props.E;
+							props.recurse = 'recurse V V, ' + props.recurse;
+							parse(element, props);
+						}
+					} else {
+						parse(element, props);
+					}
+					animate();
+				})
+				props = propsSave;
+				start = start_save;
+				end = end_save
+				commit();
+
+			}
+			else {
+				alert(`Command not recognized ${text}`);
+			}
+			updateStartAndEnd();
+		}
+
+		// let args = /(\w) (-?\d+.?(?:\d+)?)/.exec(text);
+		// 		for (let i = 0; i < args.length / 2; i++) {
+		// 			props.var[`${args[2 * i]}`] = args[2 * i + 1];
+		// 		}
+		// 		propsTemp = props;
+		// 		props = {};
+		// 		console.log(props);
+		// 		custom
+		// 		parse(customFunctions[functionName.toString()], props);
+
+		window.addEventListener("keydown", (evt) => {
+			evt = evt || window.event;
+			if (evt.keyCode == '81') {
+				console.log(line);
+				//line.rotateZ(THREE.MathUtils.degToRad(45));
+			}
+			if (evt.keyCode == '69') {
+				console.log(line);
+				//line.rotateZ(THREE.MathUtils.degToRad(-45));
+			}
+			if (evt.keyCode == '32') {
+			} if (evt.keyCode == '13') {
+				let text = document.getElementById('textEntryMain').value
+				parse(text);
+				document.getElementById('textEntryMain').value = null;
+			}
+
+		})
+
+		init();
+		animate();
+
+		function getElementHW(element) {
+			let currentElement = element
+			if (typeof (currentElement) == "string") {
+				currentElement = document.getElementById(currentElement);
+			}
+			let canvasWidth = parseInt(window.getComputedStyle(surface, null)['width'].match(/\w+/));
+			let canvasHeight = parseInt(window.getComputedStyle(surface, null)['height'].match(/\w+/));
+			return [canvasWidth, canvasHeight];
+
+		}
+
+		function init() {
+
+			// Create Scene and set Background
+			scene = new THREE.Scene();
+			scene.background = new THREE.Color(1.0,1.0,1.0);
+
+			// set rendering. Possibly render in WebGL directly instead of SVG?
+			//renderer = new SVGRenderer(); //{ antialias: true }
+			renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" }); //
+
+			// parent rendering element to some HTML  element
+			surface = document.getElementById('canvasElement');
+			surface.appendChild(renderer.domElement);
+
+			// calculate dimensions
+			let HW = getElementHW(surface);
+			renderer.setSize(HW[0], HW[1]);
+
+			// camera
+			camera = new THREE.PerspectiveCamera(33, HW[0] / HW[1], 0.1, 100);
+			camera.position.x = -15;
+			camera.position.y = 5;
+			camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+			// orbit controls
+			controls = new OrbitControls(camera, renderer.domElement)
+			controls.update();
+			//controls.addEventListener('change', animate);
+
+			// construct grid for perspective
+
+			var size = 10;
+			var divisions = 10;
+
+			var gridHelper = new THREE.GridHelper(size, divisions);
+			scene.add(gridHelper);
+
+			// lighting 
+			var light = new THREE.PointLight(0xffffff, 1, 100);
+			light.position.set(0, 50, 0);
+			scene.add(light);
+
+
+			startCircle = new THREE.Mesh(new THREE.SphereGeometry(0.05, 50, 50, 0, Math.PI * 2, 0, Math.PI * 2), new THREE.MeshToonMaterial({ color: 0x000000 }));
+			//startCircle.material.color = 0xff0000
+			scene.add(startCircle);
+			startCircle.position.set(start[0], start[1], start[2]);
+			endCircle = new THREE.Mesh(new THREE.SphereGeometry(0.05, 50, 50, 0, Math.PI * 2, 0, Math.PI * 2), new THREE.MeshToonMaterial({ color: 0xffff }));
+			//endCircle.material.color = 0x00ff00
+			scene.add(endCircle);
+
+			console.log(start);
+			startCircle.position.x = start['x'];
+			startCircle.position.y = start['y'];
+			startCircle.position.z = start['z'];
+			console.log(startCircle);
+
+			console.log(end);
+			endCircle.position.x = end['x'];
+			endCircle.position.y = end['y'];
+			endCircle.position.z = end['z'];
+			console.log(endCircle);
+
+			// create a basic line as a starting element
+
+			let pointsArr = new THREE.BufferGeometry().setFromPoints([start, end]);
+			line = new THREE.LineSegments(pointsArr, getMaterial());
+			scene.add(line);
+
+			window.addEventListener('resize', onWindowResize, false);
+
+		}
+
+		function onWindowResize() {
+
+			let HW = getElementHW(surface);
+
+			camera.aspect = surface[0] / surface[1];
+			camera.updateProjectionMatrix();
+
+			renderer.setSize(surface[0], surface[1]);
+
+		}
+
+		function animate() {
+
+			controls.update();
+			renderer.render(scene, camera);
+			requestAnimationFrame(animate);
+
+		}
+
+	</script>
+</body>
+
+</html>
